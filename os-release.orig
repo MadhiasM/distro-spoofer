@@ -1,0 +1,13 @@
+mathias@mathias-MRA-XXX:~$ cat /etc/os-release 
+PRETTY_NAME="Zorin OS 17.3"
+NAME="Zorin OS"
+VERSION_ID="17"
+VERSION="17.3"
+VERSION_CODENAME=jammy
+ID=zorin
+ID_LIKE="ubuntu debian"
+HOME_URL="https://zorin.com/os/"
+SUPPORT_URL="https://help.zorin.com/"
+BUG_REPORT_URL="https://zorin.com/os/feedback/"
+PRIVACY_POLICY_URL="https://zorin.com/legal/privacy/"
+UBUNTU_CODENAME=jammy
