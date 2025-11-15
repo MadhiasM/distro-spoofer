@@ -2,7 +2,7 @@
 
 # Konstante
 SECONDS_PER_MINUTE=60
-BAR_LENGTH=20  # Länge der Fortschrittsleiste (z. B. 20 Zeichen)
+BAR_LENGTH=20  # Progress bar length
 
 # Cleanup-Funktion
 cleanup() {
@@ -11,23 +11,23 @@ cleanup() {
     exit
 }
 
-# Trap auf Abbruch (Strg+C) oder Exit
+# Trap on abort (Strg+C) or exit
 trap cleanup SIGINT SIGTERM
 
 read -p "Enter duration for spoofing the OS in minutes: " delay
 delay=${delay:-10}
 
-# Minuten in Sekunden umrechnen
+# time conversion
 total=$((delay * SECONDS_PER_MINUTE))
 
-
+# backup original os-release for late restoration
 sudo mv /etc/os-release ./os-release.orig
 sudo cp ./os-release.spoof /etc/os-release
 sudo systemctl start intune-daemon.service
 
 echo "⏳ Spoofing started for $delay minutes..."
 
-# Fortschrittsanzeige pro Minute
+# progress bar
 for ((i=1; i<=delay; i++)); do
 
     percent=$(( (i * 100) / delay ))
