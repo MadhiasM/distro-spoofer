@@ -1,13 +1,16 @@
 #!/bin/bash
 
+# Resolve the directory where this script lives, regardless of where it is called from
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+
 # Konstante
 SECONDS_PER_MINUTE=60
 BAR_LENGTH=20  # Progress bar length
 
 # Cleanup-Funktion
 cleanup() {
-    echo -e "\n⚠️  Script abborted – restoring original file..."
-    sudo cp ./os-release.orig /etc/os-release 2>/dev/null || true
+    echo -e "\n⚠️  Script aborted – restoring original file..."
+    sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release 2>/dev/null || true
     exit
 }
 
@@ -20,9 +23,22 @@ delay=${delay:-10}
 # time conversion
 total=$((delay * SECONDS_PER_MINUTE))
 
-# backup original os-release for late restoration
-sudo mv /etc/os-release ./os-release.orig
-sudo cp ./os-release.spoof /etc/os-release
+# Check that the spoof file exists before making any changes
+if [ ! -f "$SCRIPT_DIR/os-release.spoof" ]; then
+    echo "❌ Error: Spoof file '$SCRIPT_DIR/os-release.spoof' not found. Aborting." >&2
+    exit 1
+fi
+
+# backup original os-release for later restoration
+sudo mv /etc/os-release "$SCRIPT_DIR/os-release.orig"
+
+# Copy the spoof file; restore the original if this fails
+if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
+    echo "❌ Error: Failed to copy spoof file. Restoring original..." >&2
+    sudo mv "$SCRIPT_DIR/os-release.orig" /etc/os-release
+    exit 1
+fi
+
 sudo systemctl start intune-daemon.service
 
 echo "⏳ Spoofing started for $delay minutes..."
@@ -41,8 +57,7 @@ for ((i=1; i<=delay; i++)); do
     sleep "$SECONDS_PER_MINUTE"
 done
 
-#sudo mv /etc/os-release.orig /etc/os-release
-sudo cp ./os-release.orig /etc/os-release
+sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
 
 echo -e "\n✅ Spoofing finished, original file restored."
 
