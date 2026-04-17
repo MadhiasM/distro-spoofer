@@ -11,13 +11,19 @@ LOCK_FILE="$SCRIPT_DIR/spoof.lock"
 # Cleanup function
 cleanup() {
     echo -e "\n⚠️  Script aborted – restoring original file..."
-    sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release 2>/dev/null || true
+    if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
+        echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
+    fi
+    sudo systemctl stop intune-daemon.service 2>/dev/null || true
     rm -f "$LOCK_FILE"
     exit
 }
 
 # Trap on abort (Ctrl+C) or exit
 trap cleanup SIGINT SIGTERM
+
+# Cache sudo credentials upfront to avoid repeated password prompts during execution
+sudo -v || { echo "❌ Error: Failed to acquire sudo privileges. Aborting." >&2; exit 1; }
 
 # --- Lock file / crash recovery ---
 
@@ -45,14 +51,21 @@ if [ -f "$LOCK_FILE" ]; then
     fi
 fi
 
-# Acquire lock with current PID
-if ! echo $$ > "$LOCK_FILE" 2>/dev/null; then
-    echo "❌ Error: Cannot write lock file '$LOCK_FILE'. Check permissions." >&2
+# Acquire lock atomically using noclobber to prevent race condition
+if ! (set -C; echo $$ > "$LOCK_FILE") 2>/dev/null; then
+    echo "❌ Error: Cannot acquire lock file '$LOCK_FILE'. Another instance may have just started." >&2
     exit 1
 fi
 
 read -p "Enter duration for spoofing the OS in minutes: " delay
 delay=${delay:-10}
+
+# Validate that delay is a positive integer
+if ! [[ "$delay" =~ ^[0-9]+$ ]] || [ "$delay" -le 0 ]; then
+    echo "❌ Error: Duration must be a positive integer (got: '$delay'). Aborting." >&2
+    rm -f "$LOCK_FILE"
+    exit 1
+fi
 
 # time conversion
 total=$((delay * SECONDS_PER_MINUTE))
@@ -65,7 +78,11 @@ if [ ! -f "$SCRIPT_DIR/os-release.spoof" ]; then
 fi
 
 # backup original os-release for later restoration
-sudo mv /etc/os-release "$SCRIPT_DIR/os-release.orig"
+if ! sudo mv /etc/os-release "$SCRIPT_DIR/os-release.orig"; then
+    echo "❌ Error: Failed to move /etc/os-release to backup. Aborting." >&2
+    rm -f "$LOCK_FILE"
+    exit 1
+fi
 
 # Copy the spoof file; restore the original if this fails
 if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
@@ -108,7 +125,13 @@ while [ $elapsed -lt $total ]; do
     elapsed=$((elapsed + 1))
 done
 
-sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
+if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
+    echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
+fi
+
+if ! sudo systemctl stop intune-daemon.service; then
+    echo "❌ Error: Failed to stop intune-daemon.service." >&2
+fi
 
 rm -f "$LOCK_FILE"
 echo -e "\n✅ Spoofing finished, original file restored."
