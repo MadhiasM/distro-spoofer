@@ -6,16 +6,30 @@ SCRIPT_DIR=$(dirname "$(realpath "$0")")
 # Konstante
 SECONDS_PER_MINUTE=60
 BAR_LENGTH=20  # Progress bar length
+LOCK_FILE=/tmp/spoof_os_${USER}.lock
 
 # Cleanup-Funktion
+release_lock() {
+    exec 9>&- 2>/dev/null
+    rm -f "$LOCK_FILE"
+}
+
 cleanup() {
     echo -e "\n⚠️  Script aborted – restoring original file..."
     sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release 2>/dev/null || true
+    release_lock
     exit
 }
 
 # Trap on abort (Strg+C) or exit
 trap cleanup SIGINT SIGTERM
+
+# Prevent multiple simultaneous instances using an exclusive lock (atomic, no race condition)
+exec 9>"$LOCK_FILE"
+if ! flock -n 9 2>/dev/null; then
+    echo "❌ Error: Another instance of spoof_os.sh is already running (lock file: $LOCK_FILE). Aborting." >&2
+    exit 1
+fi
 
 read -p "Enter duration for spoofing the OS in minutes: " delay
 delay=${delay:-10}
@@ -26,6 +40,7 @@ total=$((delay * SECONDS_PER_MINUTE))
 # Check that the spoof file exists before making any changes
 if [ ! -f "$SCRIPT_DIR/os-release.spoof" ]; then
     echo "❌ Error: Spoof file '$SCRIPT_DIR/os-release.spoof' not found. Aborting." >&2
+    release_lock
     exit 1
 fi
 
@@ -36,6 +51,7 @@ sudo mv /etc/os-release "$SCRIPT_DIR/os-release.orig"
 if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
     echo "❌ Error: Failed to copy spoof file. Restoring original..." >&2
     sudo mv "$SCRIPT_DIR/os-release.orig" /etc/os-release
+    release_lock
     exit 1
 fi
 
@@ -73,6 +89,7 @@ while [ $elapsed -lt $total ]; do
 done
 
 sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
+release_lock
 
 echo -e "\n✅ Spoofing finished, original file restored."
 
