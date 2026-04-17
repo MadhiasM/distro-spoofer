@@ -65,7 +65,7 @@ while [ $elapsed -lt $total ]; do
             total=$((total + 5 * SECONDS_PER_MINUTE))
         elif [ "$key" = "-" ]; then
             new_total=$((total - 5 * SECONDS_PER_MINUTE))
-            [ $new_total -gt $elapsed ] && total=$new_total
+            total=$(( new_total > elapsed ? new_total : elapsed ))
         fi
     fi
 
