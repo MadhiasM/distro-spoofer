@@ -3,31 +3,51 @@
 # Resolve the directory where this script lives, regardless of where it is called from
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
-# Konstante
+# Constants
 SECONDS_PER_MINUTE=60
 BAR_LENGTH=20  # Progress bar length
-LOCK_FILE=/tmp/spoof_os_${USER}.lock
+LOCK_FILE="$SCRIPT_DIR/spoof.lock"
 
-# Cleanup-Funktion
-release_lock() {
-    exec 9>&- 2>/dev/null
-    rm -f "$LOCK_FILE"
-}
-
+# Cleanup function
 cleanup() {
     echo -e "\n⚠️  Script aborted – restoring original file..."
     sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release 2>/dev/null || true
-    release_lock
+    rm -f "$LOCK_FILE"
     exit
 }
 
-# Trap on abort (Strg+C) or exit
+# Trap on abort (Ctrl+C) or exit
 trap cleanup SIGINT SIGTERM
 
-# Prevent multiple simultaneous instances using an exclusive lock (atomic, no race condition)
-exec 9>"$LOCK_FILE"
-if ! flock -n 9 2>/dev/null; then
-    echo "❌ Error: Another instance of spoof_os.sh is already running (lock file: $LOCK_FILE). Aborting." >&2
+# --- Lock file / crash recovery ---
+
+if [ -f "$LOCK_FILE" ]; then
+    stored_pid=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [ -n "$stored_pid" ] && kill -0 "$stored_pid" 2>/dev/null; then
+        echo "❌ Error: Another instance of this script is already running (PID $stored_pid). Aborting." >&2
+        exit 1
+    else
+        echo "⚠️  Stale lock detected (PID ${stored_pid:-unknown} is not running). Recovering from possible crash..."
+        # Restore /etc/os-release if it is still in the spoof state
+        if [ -f "$SCRIPT_DIR/os-release.spoof" ] && cmp -s /etc/os-release "$SCRIPT_DIR/os-release.spoof"; then
+            echo "🔄 Restoring original /etc/os-release from backup..."
+            if [ -f "$SCRIPT_DIR/os-release.orig" ]; then
+                sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
+                echo "✅ Original /etc/os-release restored."
+            else
+                echo "⚠️  Backup '$SCRIPT_DIR/os-release.orig' not found. Cannot restore automatically." >&2
+            fi
+        else
+            echo "ℹ️  /etc/os-release is not in spoof state. No restoration needed."
+        fi
+        rm -f "$LOCK_FILE"
+        echo "🔓 Stale lock removed. Continuing with normal execution..."
+    fi
+fi
+
+# Acquire lock with current PID
+if ! echo $$ > "$LOCK_FILE" 2>/dev/null; then
+    echo "❌ Error: Cannot write lock file '$LOCK_FILE'. Check permissions." >&2
     exit 1
 fi
 
@@ -40,7 +60,7 @@ total=$((delay * SECONDS_PER_MINUTE))
 # Check that the spoof file exists before making any changes
 if [ ! -f "$SCRIPT_DIR/os-release.spoof" ]; then
     echo "❌ Error: Spoof file '$SCRIPT_DIR/os-release.spoof' not found. Aborting." >&2
-    release_lock
+    rm -f "$LOCK_FILE"
     exit 1
 fi
 
@@ -51,7 +71,7 @@ sudo mv /etc/os-release "$SCRIPT_DIR/os-release.orig"
 if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
     echo "❌ Error: Failed to copy spoof file. Restoring original..." >&2
     sudo mv "$SCRIPT_DIR/os-release.orig" /etc/os-release
-    release_lock
+    rm -f "$LOCK_FILE"
     exit 1
 fi
 
@@ -89,11 +109,10 @@ while [ $elapsed -lt $total ]; do
 done
 
 sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
-release_lock
 
+rm -f "$LOCK_FILE"
 echo -e "\n✅ Spoofing finished, original file restored."
 
 
 # Colored Progress bar:
 # echo -e "\033[31m██████████████████░░░░░░░░░░░░░░░░░░\033[0m"
-
