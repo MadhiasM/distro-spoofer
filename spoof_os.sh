@@ -41,20 +41,35 @@ fi
 
 sudo systemctl start intune-daemon.service
 
-echo "⏳ Spoofing started for $delay minutes..."
+echo "⏳ Spoofing started for $delay minutes... (press +/- to adjust by 5 min)"
 
-# progress bar
-for ((i=1; i<=delay; i++)); do
+# progress bar – tracks elapsed seconds; re-reads total each iteration so
+# +/- adjustments are reflected immediately in both the bar and the ETA
+elapsed=0
+while [ $elapsed -lt $total ]; do
 
-    percent=$(( (i * 100) / delay ))
-    filled=$(( (i * BAR_LENGTH) / delay ))
+    elapsed_min=$(( elapsed / SECONDS_PER_MINUTE ))
+    total_min=$(( total / SECONDS_PER_MINUTE ))
+    percent=$(( (elapsed * 100) / total ))
+    filled=$(( (elapsed * BAR_LENGTH) / total ))
     empty=$((BAR_LENGTH - filled))
 
     bar=$(printf "%0.s█" $(seq 1 $filled))
     spaces=$(printf "%0.s░" $(seq 1 $empty))
 
-    echo -ne " ${bar}${spaces} ${percent} %  (${i}/${delay} min)\r"
-    sleep "$SECONDS_PER_MINUTE"
+    echo -ne " ${bar}${spaces} ${percent}%  (${elapsed_min}/${total_min} min) [+/-: ±5 min]\r"
+
+    # Wait up to 1 s (-t 1); don't echo the character (-s); read exactly 1 char (-n 1)
+    if read -r -t 1 -s -n 1 key 2>/dev/null; then
+        if [ "$key" = "+" ]; then
+            total=$((total + 5 * SECONDS_PER_MINUTE))
+        elif [ "$key" = "-" ]; then
+            new_total=$((total - 5 * SECONDS_PER_MINUTE))
+            [ $new_total -gt $elapsed ] && total=$new_total
+        fi
+    fi
+
+    elapsed=$((elapsed + 1))
 done
 
 sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
