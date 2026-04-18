@@ -14,7 +14,9 @@ cleanup() {
     if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
         echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
     fi
-    sudo systemctl stop intune-daemon.service 2>/dev/null || true
+    if ! sudo systemctl stop intune-daemon.service; then
+        echo "❌ Error: Failed to stop intune-daemon.service." >&2
+    fi
     rm -f "$LOCK_FILE"
     exit
 }
@@ -38,8 +40,11 @@ if [ -f "$LOCK_FILE" ]; then
         if [ -f "$SCRIPT_DIR/os-release.spoof" ] && cmp -s /etc/os-release "$SCRIPT_DIR/os-release.spoof"; then
             echo "🔄 Restoring original /etc/os-release from backup..."
             if [ -f "$SCRIPT_DIR/os-release.orig" ]; then
-                sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release
-                echo "✅ Original /etc/os-release restored."
+                if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
+                    echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
+                else
+                    echo "✅ Original /etc/os-release restored."
+                fi
             else
                 echo "⚠️  Backup '$SCRIPT_DIR/os-release.orig' not found. Cannot restore automatically." >&2
             fi
@@ -92,7 +97,14 @@ if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
     exit 1
 fi
 
-sudo systemctl start intune-daemon.service
+if ! sudo systemctl start intune-daemon.service; then
+    echo "❌ Error: Failed to start intune-daemon.service." >&2
+    if ! sudo mv "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
+        echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
+    fi
+    rm -f "$LOCK_FILE"
+    exit 1
+fi
 
 echo "⏳ Spoofing started for $delay minutes... (press +/- to adjust by 5 min)"
 
