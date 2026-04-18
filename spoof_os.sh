@@ -21,8 +21,8 @@ cleanup() {
     exit
 }
 
-# Trap on abort (Ctrl+C) or exit
-trap cleanup SIGINT SIGTERM
+# Trap on abort (Ctrl+C), termination, or suspend (Ctrl+Z)
+trap cleanup SIGINT SIGTERM SIGTSTP
 
 # Cache sudo credentials upfront to avoid repeated password prompts during execution
 sudo -v || { echo "❌ Error: Failed to acquire sudo privileges. Aborting." >&2; exit 1; }
