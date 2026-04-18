@@ -14,8 +14,8 @@ cleanup() {
     if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
         echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
     fi
-    if ! sudo systemctl stop intune-daemon.service; then
-        echo "❌ Error: Failed to stop intune-daemon.service." >&2
+    if ! sudo systemctl stop intune-daemon.service intune-daemon.socket; then
+        echo "❌ Error: Failed to stop intune-daemon.service/socket." >&2
     fi
     rm -f "$LOCK_FILE"
     exit
@@ -97,8 +97,8 @@ if ! sudo cp "$SCRIPT_DIR/os-release.spoof" /etc/os-release; then
     exit 1
 fi
 
-if ! sudo systemctl start intune-daemon.service; then
-    echo "❌ Error: Failed to start intune-daemon.service." >&2
+if ! sudo systemctl start intune-daemon.socket intune-daemon.service; then
+    echo "❌ Error: Failed to start intune-daemon.service/socket." >&2
     if ! sudo mv "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
         echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
     fi
@@ -141,8 +141,8 @@ if ! sudo cp "$SCRIPT_DIR/os-release.orig" /etc/os-release; then
     echo "❌ Error: Failed to restore original /etc/os-release. Manual intervention required." >&2
 fi
 
-if ! sudo systemctl stop intune-daemon.service; then
-    echo "❌ Error: Failed to stop intune-daemon.service." >&2
+if ! sudo systemctl stop intune-daemon.service intune-daemon.socket; then
+    echo "❌ Error: Failed to stop intune-daemon.service/socket." >&2
 fi
 
 rm -f "$LOCK_FILE"
